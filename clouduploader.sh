@@ -2,18 +2,18 @@
 
 # Default values
 AZURE_STORAGE_ACCOUNT_NAME="learntocloud13"
-DEFAULT_CONTAINER="clouduploader-cli-storage"
-DEFAULT_EXPIRY="+2hours"  # Set expiry to 2 hours by default (modify as needed)
-SAS_PERMISSIONS="r"    # Set permissions to read-only by default (modify as needed)
+DEFAULT_CONTAINER="clouduploader"
+DEFAULT_EXPIRY="+2 hours"  # Set expiry to 2 hours by default (modify as needed)
+DEFAULT_PERMISSIONS="r"  # Set permissions to read-only by default (modify as needed)
 
 # Function to display usage message
 function usage() {
-  echo "Usage: $0 &lt;filename&gt; [options]"
-  echo "  -t, --target &lt;container&gt;     Target container name (optional)"
+  echo "Usage: $0 <filename> [options]"
+  echo "  -t, --target <container>     Target container name (optional)"
   echo "  -o, --overwrite              Overwrite existing (optional)"
   echo "  -s, --shareable-link         Generate shareable link after upload (optional)"
-  echo "  -e, --sas-expiry &lt;time&gt;      Set SAS token expiry duration (default: +2hours)"
-  echo "  -p, --sas-permissions &lt;permissions&gt;  Set SAS token permissions (default: r - read)"
+  echo "  -e, --sas-expiry <time>      Set SAS token expiry duration (default: +2 hours)"
+  echo "  -p, --sas-permissions <permissions>  Set SAS token permissions (default: r - read)"
   echo "  -h, --help                   Display this help message"
 }
 
@@ -34,11 +34,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -e|--sas-expiry)
-      SAS_EXPIRY="$2"
+      sas_expiry="$2"
       shift 2
       ;;
     -p|--sas-permissions)
-      SAS_PERMISSIONS="$2"
+      sas_permissions="$2"
       shift 2
       ;;
     -h|--help)
@@ -69,13 +69,17 @@ if [ ! -f "$filename" ]; then
   exit_error "File '$filename' not found"
 fi
 
-# Load storage account name from environment variable (replace with your variable name)
-storage_account_name="${AZURE_STORAGE_ACCOUNT_NAME}"
+# Load storage account name from environment variable
+storage_account_name="${AZURE_STORAGE_ACCOUNT_NAME:-$storage_account_name}"
 
 # Set target container (use default if not provided)
-if [ -z "$target_container" ]; then
-  target_container="$DEFAULT_CONTAINER"
-fi
+target_container="${target_container:-$DEFAULT_CONTAINER}"
+
+# Set default expiry if not provided
+sas_expiry="${sas_expiry:-$DEFAULT_EXPIRY}"
+
+# Set default permissions if not provided
+sas_permissions="${sas_permissions:-$DEFAULT_PERMISSIONS}"
 
 # Build upload command with options
 upload_command="az storage blob upload --container-name \"$target_container\" \
@@ -84,8 +88,8 @@ if [ "$overwrite" = true ]; then
   upload_command+=" --overwrite"
 fi
 
-# Generate SAS token expiry time
-sas_expiry_time=$(date -u -d "$DEFAULT_EXPIRY" '+%Y-%m-%dT%H:%MZ')
+# Generate SAS token if required
+sas_expiry_time=$(date -u -d "$sas_expiry" '+%Y-%m-%dT%H:%MZ')
 
 if [ "$generate_link" = true ]; then
   # Generate SAS token with expiry and permissions
@@ -93,14 +97,16 @@ if [ "$generate_link" = true ]; then
     --name "$filename" \
     --account-name "$storage_account_name" \
     --container-name "$target_container" \
-    --permissions r \
+    --permissions "$sas_permissions" \
     --expiry "$sas_expiry_time" \
-    --account-key YL1uqN93d8erhkMKRtJ/AZWuuvOqIoawjN9pGSX5zYvE/ZSZY7FM2puJOJg554HbRxS9fyvrW2Pw+AStlzAbqw== \
-    --auth-mode key \
+    --auth-mode login \
+    --as-user \
     --output tsv)
 
-  # Modify upload command to capture output as table for easier parsing
-  # upload_command+=" --output table"
+  # Check if SAS token generation was successful
+  if [ -z "$sas_token" ]; then
+    exit_error "Failed to generate SAS token"
+  fi
 fi
 
 echo "Uploading '$filename' to Azure Blob Storage (container: $target_container)..."
