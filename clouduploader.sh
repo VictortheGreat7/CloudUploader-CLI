@@ -84,6 +84,7 @@ sas_permissions="${sas_permissions:-$DEFAULT_PERMISSIONS}"
 # Build upload command with options
 upload_command="az storage blob upload --container-name \"$target_container\" \
 --file \"$filename\" --name \"$filename\" --account-name \"$storage_account_name\""
+
 if [ "$overwrite" = true ]; then
   upload_command+=" --overwrite"
 fi
@@ -110,7 +111,7 @@ if [ "$generate_link" = true ]; then
 fi
 
 echo "Uploading '$filename' to Azure Blob Storage (container: $target_container)..."
-eval "$upload_command" | pv
+eval "$upload_command"
 
 if [ $? -eq 0 ]; then
   echo "Successfully uploaded '$filename' to Azure Blob Storage (container: $target_container)"
